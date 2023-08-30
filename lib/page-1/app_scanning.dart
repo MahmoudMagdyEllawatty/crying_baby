@@ -26,7 +26,7 @@ class _TabScanningState extends State<TabScanning> {
   final _regionBeacons = <Region, List<Beacon>>{};
   final _beacons = <Beacon>[];
   final controller = Get.find<RequirementStateController>();
-
+  String state = "All Done";
   List<Device> devices = [];
   List<WorkingHour> workingHours = [];
   List<Attendance> attendance = [];
@@ -202,10 +202,12 @@ class _TabScanningState extends State<TabScanning> {
     if (!controller.authorizationStatusOk ||
         !controller.locationServiceEnabled ||
         !controller.bluetoothEnabled) {
-      print(
-          'RETURNED, authorizationStatusOk=${controller.authorizationStatusOk}, '
-              'locationServiceEnabled=${controller.locationServiceEnabled}, '
-              'bluetoothEnabled=${controller.bluetoothEnabled}');
+      setState(() {
+        state ='RETURNED, authorizationStatusOk=${controller.authorizationStatusOk}, '
+            'locationServiceEnabled=${controller.locationServiceEnabled}, '
+            'bluetoothEnabled=${controller.bluetoothEnabled}';
+      });
+
       return;
     }
     final regions = <Region>[];
@@ -233,9 +235,13 @@ class _TabScanningState extends State<TabScanning> {
           if (mounted) {
             setState(() {
               _regionBeacons[result.region] = result.beacons;
-              _beacons.clear();
+
               _regionBeacons.values.forEach((list) {
-                _beacons.addAll(list);
+                list.forEach((element) {
+                  if(!checkIfExist(element.macAddress!)){
+                    _beacons.addAll(list);
+                  }
+                });
               });
               _beacons.sort(_compareParameters);
             });
@@ -243,12 +249,21 @@ class _TabScanningState extends State<TabScanning> {
         });
   }
 
+  bool checkIfExist(String macAddress){
+    for(int i=0;i<_beacons.length;i++){
+      if(_beacons[i].macAddress! == macAddress){
+        return true;
+      }
+    }
+    return false;
+  }
+
   pauseScanBeacon() async {
     _streamRanging?.pause();
     if (_beacons.isNotEmpty) {
-      setState(() {
-        _beacons.clear();
-      });
+      // setState(() {
+      //   _beacons.clear();
+      // });
     }
   }
 
@@ -316,6 +331,39 @@ class _TabScanningState extends State<TabScanning> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+
+                        Visibility(
+                          visible: _beacons.isNotEmpty,
+                          child: Container(
+                            // groupDU3 (1:108)
+                              margin: EdgeInsets.fromLTRB(0*fem, 0*fem, 0*fem, 0*fem),
+                              width: double.infinity,
+                              height: 43.06*fem,
+                              child: Text(
+                                'Beacon Devices :'+ (_beacons.isNotEmpty? _beacons[0].macAddress! : ''),
+                                textAlign: TextAlign.center,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              )
+                          ),
+                        ),
+
+                        Visibility(
+                          visible: state.isNotEmpty,
+                          child: Container(
+                            // groupDU3 (1:108)
+                              margin: EdgeInsets.fromLTRB(0*fem, 0*fem, 0*fem, 0*fem),
+                              width: double.infinity,
+                              height: 43.06*fem,
+                              child: Text(
+                                'Auth State:'+ (state.isNotEmpty? state : ''),
+                                textAlign: TextAlign.center,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              )
+                          ),
+                        ),
+
                         Visibility(
                           visible: attendance.isNotEmpty ? (attendance[0].attend_at != '') : false,
                           child: Container(
