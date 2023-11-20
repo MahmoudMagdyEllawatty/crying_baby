@@ -1,14 +1,17 @@
 import 'dart:convert';
 
+import 'package:CryingBaby/colors.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter_beacon/flutter_beacon.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'dart:io' show Platform;
 import '../controller/requirement_state_controller.dart';
 import '../model/Attendance.dart';
+import '../model/Company.dart';
 import '../model/Device.dart';
 import '../model/SharedData.dart';
 import '../model/WorkingHour.dart';
@@ -26,16 +29,54 @@ class _TabScanningState extends State<TabScanning> {
   final _regionBeacons = <Region, List<Beacon>>{};
   final _beacons = <Beacon>[];
   final controller = Get.find<RequirementStateController>();
-  String state = "All Done";
+  String state = "";
   List<Device> devices = [];
   List<WorkingHour> workingHours = [];
   List<Attendance> attendance = [];
 
 
+  DateTime now = DateTime.now();
+  String formattedDate = "";
+  bool isOnline = false;
+  String secondPeriodDate= "";
+
+
+  List<Company> parseSite(String responseBody){
+    final parsed = json.decode(responseBody);
+    return parsed.map<Company>((json){
+      return Company.fromJson(json);
+    }).toList();
+
+  }
+
+
+  Future<String> getSite() async {
+
+    final response = await http.get(
+      Uri.parse(SharedData.API_URL+"/site_settings"),
+      headers: {"Content-type" : "application/json",
+        "Accept":"application/json"},
+
+    );
+    if(response.statusCode == 200){
+      setState(() {
+        Company company = parseSite(response.body)[0];
+        SharedData.currentCompany = company;
+      });
+      return "";
+    }else{
+      throw Exception('Cannot Save User');
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+
+    if(SharedData.currentCompany.name == ""){
+      SharedData.currentCompany.enable_early_exit = "0";
+      getSite();
+    }
 
     loadDevices();
     loadWorkingHours();
@@ -98,6 +139,7 @@ class _TabScanningState extends State<TabScanning> {
     if(response.statusCode == 200){
       setState(() {
         workingHours = parseWorking(response.body);
+        SharedData.workingHours = workingHours;
       });
       return "تم تسجيل الدخول بنجاح";
     }else{
@@ -117,6 +159,7 @@ class _TabScanningState extends State<TabScanning> {
     if(response.statusCode == 200){
       setState(() {
         attendance = parseAttendance(response.body);
+        SharedData.attendance = attendance;
       });
       return "تم تسجيل الدخول بنجاح";
     }else{
@@ -128,7 +171,7 @@ class _TabScanningState extends State<TabScanning> {
 
   //region attendance
 
-  Future<String> checkIn(String device) async {
+  Future<String> checkIn(String device,String actualTime) async {
 
     final response = await http.post(
         Uri.parse(SharedData.API_URL+"/check_in"),
@@ -136,13 +179,15 @@ class _TabScanningState extends State<TabScanning> {
           "Accept":"application/json"},
         body: jsonEncode({
           "employer_id": SharedData.user.id,
-          "device" : device
+          "device" : device,
+          "actual_time" : actualTime
         })
     );
     if(response.statusCode == 200){
 
       setState(() {
         attendance = parseAttendance(response.body);
+        SharedData.attendance = attendance;
       });
       return "Done";
 
@@ -152,7 +197,7 @@ class _TabScanningState extends State<TabScanning> {
     }
   }
 
-  Future<String> checkOut(String device) async {
+  Future<String> checkOut(String device,String actualTime) async {
 
     final response = await http.post(
         Uri.parse(SharedData.API_URL+"/check_out"),
@@ -160,13 +205,15 @@ class _TabScanningState extends State<TabScanning> {
           "Accept":"application/json"},
         body: jsonEncode({
           "employer_id": SharedData.user.id,
-          "device" : device
+          "device" : device,
+          "actual_time" : actualTime
         })
     );
     if(response.statusCode == 200){
 
       setState(() {
         attendance = parseAttendance(response.body);
+        SharedData.attendance = attendance;
       });
       return "Done";
 
@@ -179,9 +226,15 @@ class _TabScanningState extends State<TabScanning> {
   String checkDeviceExist(){
     for(int i =0;i< devices.length;i++){
       if(isDeviceExist(devices[i].device_mac)){
+        setState(() {
+          isOnline = true;
+        });
         return devices[i].device_mac;
       }
     }
+    setState(() {
+      isOnline = false;
+    });
     return "";
   }
 
@@ -210,6 +263,9 @@ class _TabScanningState extends State<TabScanning> {
 
       return;
     }
+    setState(() {
+      state = 'All Done';
+    });
     final regions = <Region>[];
 
     if (Platform.isIOS) {
@@ -232,9 +288,15 @@ class _TabScanningState extends State<TabScanning> {
     _streamRanging =
         flutterBeacon.ranging(regions).listen((RangingResult result) {
 
+          setState(() {
+            state += "\nSearching Devices";
+          });
+
           if (mounted) {
             setState(() {
               _regionBeacons[result.region] = result.beacons;
+
+
 
               _regionBeacons.values.forEach((list) {
                 list.forEach((element) {
@@ -243,7 +305,9 @@ class _TabScanningState extends State<TabScanning> {
                   }
                 });
               });
+              checkDeviceExist();
               _beacons.sort(_compareParameters);
+              state +="\n Devices Count:"+_beacons.length.toString();
             });
           }
         });
@@ -287,426 +351,632 @@ class _TabScanningState extends State<TabScanning> {
     super.dispose();
   }
 
+  void checkForNewSharedLists(){
+    // do request here
+    setState((){
+      now = DateTime.now();
+      formattedDate = DateFormat.jm().format(now);
+      secondPeriodDate = DateFormat.Hms().format(now);
+
+    });
+
+  }
+
+
+  Attendance checkIfAttendanceExist(WorkingHour workingHour){
+
+    for(int i =0;i< attendance.length;i++){
+      if(attendance[i].actual_attend_at == workingHour.attend_time){
+        return attendance[i];
+      }
+    }
+
+    return new Attendance("", "", "", "", "", "", "", "");
+  }
+
+  String getWeekDay(String day){
+    if(day == "Saturday"){
+      return AppLocalizations.of(context)!.saturday;
+    }else if(day == "Sunday"){
+    return AppLocalizations.of(context)!.sunday;
+    }else if(day == "Monday"){
+    return AppLocalizations.of(context)!.monday;
+    }else if(day == "Tuesday"){
+    return AppLocalizations.of(context)!.tuesday;
+    }else if(day == "Wednesday"){
+    return AppLocalizations.of(context)!.wednesday;
+    }else if(day == "Thursday"){
+    return AppLocalizations.of(context)!.thursday;
+    }else{
+    return AppLocalizations.of(context)!.friday;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    double baseWidth = 375;
-    double fem = MediaQuery.of(context).size.width / baseWidth;
-    double ffem = fem * 0.97;
+
+    int remainSeconds = 60 - DateTime.now().second;
+
+    Timer(Duration(seconds: remainSeconds), () {
+      Timer.periodic(Duration(seconds: 60), (Timer t) => checkForNewSharedLists());
+    });
+
+
+
+    formattedDate = DateFormat.jm().format(now);
+    secondPeriodDate = DateFormat.Hms().format(now);
+    String currentDay = getWeekDay(DateFormat('EEEE').format(now));
+    final f = new DateFormat('yyyy-MM-dd');
+    String currentDate = f.format(now);
 
     return Scaffold(
-      body: Container(
-        // homex8o (1:67)
-        width: double.infinity,
-        height: 812*fem,
-        child: Stack(
-          children: [
-            Positioned(
-              // iphonexxs86F1 (1:68)
-              left: 0*fem,
-              top: 0*fem,
-              child: Container(
-                width: 375*fem,
-                height: 812*fem,
-                decoration: BoxDecoration (
-                  image: DecorationImage (
-                    fit: BoxFit.cover,
-                    image: AssetImage (
-                      'assets/page-1/images/vector-ZPV.png',
+      body: SingleChildScrollView(
+        child: Container(
+          padding: EdgeInsets.fromLTRB(24, 20, 24, 20),
+          width: double.infinity,
+          child: Column(
+            
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+
+                  Expanded(child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Text( formattedDate.contains("AM") ? "صباح الخير" : "مساء الخير",style: SafeGoogleFont (
+                            'Roboto',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: primary,
+                          )),
+                          Image.asset(
+                            'assets/smile_face.png',
+                            fit: BoxFit.cover,
+                            height: 30,
+                            width: 30,
+                          )
+                        ],
+                      ),
+                      Text(SharedData.user.name,style: SafeGoogleFont (
+                      'Roboto',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: primary,
+                    )),
+                    ]
+                  ),),
+                  Container(
+                    width: 70,
+                    height: 70,
+                    child: Card(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(30.0)),
+                          side: BorderSide(
+                            // border color
+                              color: Colors.white,
+                              // border thickness
+                              width: 1)),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(30.0),
+                        child: Image.network(
+                          (SharedData.user.image == "" ? SharedData.DEFAULT_IMAGE_URL : SharedData.IMAGE_URL+"/storage/app/"+SharedData.user.image),
+                          fit: BoxFit.fill,
+                          width: double.infinity,
+                          height: double.infinity,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                child: Container(
-                  // rectangle25bBm (1:70)
-                  padding: EdgeInsets.fromLTRB(30*fem, 194*fem, 30*fem, 303*fem),
-                  width: double.infinity,
-                  height: double.infinity,
-                  decoration: BoxDecoration (
-                    color: Color(0xffe8e8e8),
-                  ),
+
+                ],
+              ),
+
+              ListView.builder(
+                  physics: BouncingScrollPhysics(),
+                  scrollDirection: Axis.vertical,
+                  shrinkWrap: true,
+                  itemCount: workingHours.length,
+                  itemBuilder: (context,index){
+
+                    Attendance attend = checkIfAttendanceExist(workingHours[index]);
+                    bool isTimeNow = (DateTime.parse('2000-01-01 ${secondPeriodDate}').isAfter(
+                        DateTime.parse('2000-01-01 ${workingHours[index].attend_time}').add(Duration(minutes: -30)) ))
+                    && (DateTime.parse('2000-01-01 ${secondPeriodDate}').isBefore(
+                            DateTime.parse('2000-01-01 ${workingHours[index].leave_time}').add(Duration(minutes: 30)) ));
+
+                    bool isTimeExit = (DateTime.parse('2000-01-01 ${secondPeriodDate}').isBefore(
+                        DateTime.parse('2000-01-01 ${workingHours[index].leave_time}').add(Duration(minutes: 30)) ))
+                    && (DateTime.parse('2000-01-01 ${secondPeriodDate}').isAfter(
+                            DateTime.parse('2000-01-01 ${workingHours[index].leave_time}') ));
+
+                    if(SharedData.currentCompany.enable_early_exit == 1){
+                        bool isShiftStarted = (DateTime.parse('2000-01-01 ${secondPeriodDate}').isAfter(
+                            DateTime.parse('2000-01-01 ${workingHours[index].attend_time}') ));
+                        if(isShiftStarted)
+                          isTimeExit = true;
+                        else
+                          isTimeExit = false;
+                    }
+                    if(isTimeNow) {
+                      if (attend.day == "") {
+                        return Card(
+                          elevation: 10,
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.all(
+                                  Radius.circular(15.0)),
+                              side: BorderSide(
+                                // border color
+                                  color: primary,
+                                  // border thickness
+                                  width: 1)),
+                          margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                          child: Container(
+                            padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment
+                                            .spaceAround,
+                                        crossAxisAlignment: CrossAxisAlignment
+                                            .start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(AppLocalizations.of(context)!
+                                                  .attend,
+                                                  style: SafeGoogleFont(
+                                                    'Roboto',
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.w700,
+                                                    height: 1.1725,
+                                                    color: Color.fromARGB(
+                                                        255, 253, 163, 13),
+                                                  )),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Visibility(visible: !isOnline,
+                                        child: Icon(Icons.album_rounded,
+                                          color: Colors.red, size: 20,)),
+                                    Visibility(visible: isOnline,
+                                        child: Icon(Icons.album_rounded,
+                                          color: Colors.green, size: 20,))
+                                  ],
+                                ),
+                                Divider(color: Colors.grey,),
+                                Container(
+                                    padding: EdgeInsets.fromLTRB(0, 20, 0, 0),
+                                    child: Center(child: Text(formattedDate,
+                                      textAlign: TextAlign.center,
+                                      style: new TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 30.0),))),
+                                Container(
+                                  padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
+                                  child: ListView.builder(
+                                      physics: BouncingScrollPhysics(),
+                                      scrollDirection: Axis.vertical,
+                                      shrinkWrap: true,
+                                      itemCount: workingHours.length,
+                                      itemBuilder: (context, indexS) {
+                                        return Container(
+                                          padding: EdgeInsets.fromLTRB(
+                                              0, 10, 0, 10),
+                                          alignment: Alignment.center,
+                                          child: Text("دوام اليوم : " +
+                                              workingHours[indexS].attend_time +
+                                              " - " +
+                                              workingHours[indexS].leave_time
+                                              , style: SafeGoogleFont(
+                                                'Roboto',
+                                                fontSize: 20,
+                                                fontWeight: indexS == index
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w300,
+                                                color: primary,
+                                              )),
+                                        );
+                                      }),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                      minimumSize: Size.fromHeight(50)
+                                  ),
+                                  child: Text(
+                                    AppLocalizations.of(context)!.do_attend,
+                                    style: SafeGoogleFont(
+                                      'Roboto',
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w400,
+                                      color: Colors.white,
+                                    ),),
+                                  onPressed: () {
+                                    String macAddress = checkDeviceExist();
+                                    if (macAddress != "") {
+                                      BuildContext dialogContext = context;
+                                      showDialog(
+// The user CANNOT close this dialog  by pressing outsite it
+                                          barrierDismissible: false,
+                                          context: context,
+                                          builder: (BuildContext context) {
+                                            dialogContext = context;
+                                            return Dialog(
+// The background color
+                                              backgroundColor: Colors.white,
+                                              child: Padding(
+                                                padding: const EdgeInsets
+                                                    .symmetric(vertical: 20),
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize
+                                                      .min,
+                                                  children: [
+// The loading indicator
+                                                    CircularProgressIndicator(),
+                                                    SizedBox(
+                                                      height: 15,
+                                                    ),
+// Some text
+                                                    Text(AppLocalizations.of(
+                                                        context)!.attending)
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          });
+
+                                      checkIn(macAddress,
+                                          workingHours[index].attend_time)
+                                          .then((value) {
+                                        Navigator.pop(dialogContext);
+                                      });
+                                    } else {
+                                      Fluttertoast.showToast(
+                                          msg: AppLocalizations.of(context)!
+                                              .devices_not_found,
+                                          toastLength: Toast.LENGTH_SHORT,
+                                          gravity: ToastGravity.BOTTOM,
+                                          timeInSecForIosWeb: 1,
+                                          backgroundColor: Colors.red,
+                                          textColor: Colors.white,
+                                          fontSize: 20.0
+                                      );
+                                    }
+                                  },
+                                )
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      else if (attend.leave_at == '') {
+                        return Card(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.all(
+                                  Radius.circular(15.0)),
+                              side: BorderSide(
+                                // border color
+                                  color: primary,
+                                  // border thickness
+                                  width: 1)),
+                          margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                          child: Container(
+                            padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment
+                                            .spaceAround,
+                                        crossAxisAlignment: CrossAxisAlignment
+                                            .start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(AppLocalizations.of(context)!
+                                                  .dismiss,
+                                                  style: SafeGoogleFont(
+                                                    'Roboto',
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.w700,
+                                                    height: 1.1725,
+                                                    color: Color.fromARGB(
+                                                        255, 253, 163, 13),
+                                                  )),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Visibility(visible: !isOnline,
+                                        child: Icon(Icons.album_rounded,
+                                          color: Colors.red, size: 20,)),
+                                    Visibility(visible: isOnline,
+                                        child: Icon(Icons.album_rounded,
+                                          color: Colors.green, size: 20,))
+                                  ],
+                                ),
+                                Divider(color: Colors.grey,),
+                                Container(
+                                    padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                                    child: Stack(
+                                      children: [
+                                        Center(
+                                            child: Image.asset(
+                                              'assets/page-1/images/dismiss_clock.png',
+                                              width: 230, height: 230,)
+
+                                        ),
+                                        Center(child: Container(
+                                            margin: EdgeInsets.fromLTRB(
+                                                0, 50, 0, 0),
+                                            child: Image.asset(
+                                              "assets/hourglass.gif",
+                                              width: 70,
+                                              height: 70,
+
+                                            )
+                                        ),),
+                                        Center(child: Container(
+                                            margin: EdgeInsets.fromLTRB(
+                                                0, 130, 0, 0),
+                                            child: Text(
+                                              (DateTime.parse(
+                                                  '2000-01-01 ${workingHours[index]
+                                                      .leave_time}')
+                                                  .difference(DateTime.parse(
+                                                  '2000-01-01 ${secondPeriodDate}')))
+                                                  .toString()
+                                                  .substring(0, (DateTime.parse(
+                                                  '2000-01-01 ${workingHours[index]
+                                                      .leave_time}')
+                                                  .difference(DateTime.parse(
+                                                  '2000-01-01 ${secondPeriodDate}')))
+                                                  .toString()
+                                                  .lastIndexOf(":"))
+                                              , textAlign: TextAlign.center,
+                                              style: new TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 30.0,
+                                                  color: Colors.white),))),
+
+                                      ],
+                                    )
+                                ),
+
+                                Container(
+                                  padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
+                                  child: ListView.builder(
+                                      physics: BouncingScrollPhysics(),
+                                      scrollDirection: Axis.vertical,
+                                      shrinkWrap: true,
+                                      itemCount: workingHours.length,
+                                      itemBuilder: (context, indexS) {
+                                        return Container(
+                                          padding: EdgeInsets.fromLTRB(
+                                              0, 10, 0, 10),
+                                          alignment: Alignment.center,
+                                          child: Text("دوام اليوم : " +
+                                              workingHours[indexS].attend_time +
+                                              " - " +
+                                              workingHours[indexS].leave_time
+                                              , style: SafeGoogleFont(
+                                                'Roboto',
+                                                fontSize: 20,
+                                                fontWeight: indexS == index
+                                                    ? FontWeight.bold
+                                                    : FontWeight.w300,
+                                                color: primary,
+                                              )),
+                                        );
+                                      }),
+                                ),
+
+                                Visibility(
+                                  visible: isTimeExit,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                        minimumSize: Size.fromHeight(50)
+                                    ),
+                                    child: Text(
+                                      AppLocalizations.of(context)!.do_dismiss,
+                                      style: SafeGoogleFont(
+                                        'Roboto',
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w400,
+                                        color: Colors.white,
+                                      ),),
+                                    onPressed: () {
+                                      String macAddress = checkDeviceExist();
+                                      if (macAddress != "") {
+                                        BuildContext dialogContext = context;
+                                        showDialog(
+// The user CANNOT close this dialog  by pressing outsite it
+                                            barrierDismissible: false,
+                                            context: context,
+                                            builder: (BuildContext context) {
+                                              dialogContext = context;
+                                              return Dialog(
+// The background color
+                                                backgroundColor: Colors.white,
+                                                child: Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(vertical: 20),
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize
+                                                        .min,
+                                                    children: [
+// The loading indicator
+                                                      CircularProgressIndicator(),
+                                                      SizedBox(
+                                                        height: 15,
+                                                      ),
+// Some text
+                                                      Text(AppLocalizations.of(
+                                                          context)!.dismissing)
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            });
+
+                                        checkOut(macAddress,
+                                            workingHours[index].leave_time)
+                                            .then((value) {
+                                          Navigator.pop(dialogContext);
+                                        });
+                                      } else {
+                                        Fluttertoast.showToast(
+                                            msg: AppLocalizations.of(context)!
+                                                .devices_not_found,
+                                            toastLength: Toast.LENGTH_SHORT,
+                                            gravity: ToastGravity.BOTTOM,
+                                            timeInSecForIosWeb: 1,
+                                            backgroundColor: Colors.red,
+                                            textColor: Colors.white,
+                                            fontSize: 20.0
+                                        );
+                                      }
+                                    },
+                                  ),
+                                )
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                    }
+
+
+                    return Text("");
+                  }
+              ),
+              Visibility(
+                visible: workingHours.isNotEmpty,
+                child: Card(
+                  elevation: 10,
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(15.0)),
+                      side: BorderSide(
+                        // border color
+                          color: primary,
+                          // border thickness
+                          width: 1)),
+                  margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
                   child: Container(
-                    // autogroup92zmuTM (M89Q7QueNFsyFsaJaC92ZM)
-                    padding: EdgeInsets.fromLTRB(16*fem, 38*fem, 25*fem, 156.94*fem),
-                    width: double.infinity,
-                    height: double.infinity,
+                    padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-
-                        Visibility(
-                          visible: _beacons.isNotEmpty,
-                          child: Container(
-                            // groupDU3 (1:108)
-                              margin: EdgeInsets.fromLTRB(0*fem, 0*fem, 0*fem, 0*fem),
-                              width: double.infinity,
-                              height: 43.06*fem,
-                              child: Text(
-                                'Beacon Devices :'+ (_beacons.isNotEmpty? _beacons[0].macAddress! : ''),
-                                textAlign: TextAlign.center,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              )
-                          ),
+                        Row(
+                          children: [
+                            Text("احصائيات ("+currentDay+")"+" الموافق "+currentDate,style: SafeGoogleFont (
+                              'Roboto',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              height: 1.1725,
+                              color: Color.fromARGB(255, 253, 163, 13),
+                            )),
+                          ],
                         ),
+                        Divider(color: Colors.grey,),
+                        ListView.builder(
+                            physics: BouncingScrollPhysics(),
+                            scrollDirection: Axis.vertical,
+                            shrinkWrap: true,
+                            itemCount: workingHours.length,
+                            itemBuilder: (context,index){
 
-                        Visibility(
-                          visible: state.isNotEmpty,
-                          child: Container(
-                            // groupDU3 (1:108)
-                              margin: EdgeInsets.fromLTRB(0*fem, 0*fem, 0*fem, 0*fem),
-                              width: double.infinity,
-                              height: 43.06*fem,
-                              child: Text(
-                                'Auth State:'+ (state.isNotEmpty? state : ''),
-                                textAlign: TextAlign.center,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              )
-                          ),
-                        ),
-
-                        Visibility(
-                          visible: attendance.isNotEmpty ? (attendance[0].attend_at != '') : false,
-                          child: Container(
-                            // groupDU3 (1:108)
-                            margin: EdgeInsets.fromLTRB(0*fem, 0*fem, 0*fem, 33.94*fem),
-                            width: double.infinity,
-                            height: 43.06*fem,
-                            child: Text(
-                              'Attend At :'+ (attendance.isNotEmpty? attendance[0].attend_at : ''),
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            )
-                          ),
-                        ),
-
-                        Visibility(
-                          visible: attendance.isNotEmpty ? (attendance[0].attend_at == '') : true,
-                          child: Container(
-                            // groupDU3 (1:108)
-                            margin: EdgeInsets.fromLTRB(0*fem, 0*fem, 0*fem, 33.94*fem),
-                            width: double.infinity,
-                            height: 43.06*fem,
-                            decoration: BoxDecoration (
-                              image: DecorationImage (
-                                fit: BoxFit.cover,
-                                image: AssetImage (
-                                  'assets/page-1/images/login-button-shape.png',
-                                ),
-                              ),
-
-                            ),
-                            child: TextButton(
-                              // buttonsVwM (1:110)
-                              onPressed: () {
-                                String macAddress =checkDeviceExist();
-                                if(macAddress != ""){
-                                  BuildContext dialogContext = context;
-                                  showDialog(
-                                    // The user CANNOT close this dialog  by pressing outsite it
-                                      barrierDismissible: false,
-                                      context: context,
-                                      builder: (BuildContext context) {
-                                        dialogContext = context;
-                                        return Dialog(
-                                          // The background color
-                                          backgroundColor: Colors.white,
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 20),
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: const [
-                                                // The loading indicator
-                                                CircularProgressIndicator(),
-                                                SizedBox(
-                                                  height: 15,
-                                                ),
-                                                // Some text
-                                                Text('Attending...')
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      });
-
-                                  checkIn(macAddress).then((value){
-                                    Navigator.pop(dialogContext);
-
-
-                                  });
-                                }
-                                else{
-                                  Fluttertoast.showToast(
-                                      msg: "Devices Not Found!!!",
-                                      toastLength: Toast.LENGTH_SHORT,
-                                      gravity: ToastGravity.BOTTOM,
-                                      timeInSecForIosWeb: 1,
-                                      backgroundColor: Colors.red,
-                                      textColor: Colors.white,
-                                      fontSize: 16.0
-                                  );
-                                }
-                              },
-                              style: TextButton.styleFrom (
-                                padding: EdgeInsets.zero,
-                              ),
-                              child: Container(
-                                width: double.infinity,
-                                height: double.infinity,
-                                decoration: BoxDecoration (
-                                  borderRadius: BorderRadius.circular(36.2043800354*fem),
-
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Positioned(
-                                      // ellipse1Cas (I1:110;6:493)
-                                      left: 129.7591247559*fem,
-                                      top: 18.3795166016*fem,
-                                      child: Align(
-                                        child: SizedBox(
-                                          width: 7.24*fem,
-                                          height: 7.24*fem,
-                                          child: Container(
-                                            decoration: BoxDecoration (
-                                              borderRadius: BorderRadius.circular(3.6204378605*fem),
-                                              color: Color(0x00fbff48),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      // checkinVZy (1:111)
-                                      left: 92*fem,
-                                      top: 6*fem,
-                                      child: Align(
-                                        child: SizedBox(
-                                          width: 94*fem,
-                                          height: 30*fem,
-                                          child: Text(
-                                            'check in',
-                                            style: SafeGoogleFont (
+                              Attendance attend = checkIfAttendanceExist(workingHours[index]);
+                              return Container(
+                                  padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
+                                  alignment: Alignment.center,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      Text("موعد الدوام من "+workingHours[index].attend_time+" الى " + workingHours[index].leave_time,style: SafeGoogleFont (
+                                        'Roboto',
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w300,
+                                        color: primary,
+                                      )),
+                                      Visibility(
+                                        visible: attend.day != "",
+                                        child: Text("تسجيل الحضور  : "+
+                                            (attendance.length >= (index+1) ? attendance[index].attend_at: "")
+                                            +"\nتسجيل الانصراف : "+
+                                            (attendance.length >= (index+1) ? attendance[index].leave_at: "")
+                                            ,style: SafeGoogleFont (
                                               'Roboto',
-                                              fontSize: 25*ffem,
-                                              fontWeight: FontWeight.w700,
-                                              height: 1.1725*ffem/fem,
-                                              color: Color(0xffffffff),
-                                            ),
-                                          ),
-                                        ),
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.red,
+                                            )),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Visibility(
-                          visible: attendance.isNotEmpty ? (attendance[0].leave_at != '') : false,
-                          child: Container(
-                            // groupDU3 (1:108)
-                              margin: EdgeInsets.fromLTRB(0*fem, 0*fem, 0*fem, 0*fem),
-                              width: double.infinity,
-                              height: 43.06*fem,
-                              child: Text(
-                                'Leave At :'+(attendance.isNotEmpty ? attendance[0].leave_at : ''),
-                                textAlign: TextAlign.center,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              )
-                          ),
-                        ),
-                        Visibility(
-                          visible: attendance.isNotEmpty ? (attendance[0].leave_at == '' && attendance[0].attend_at != '') : false,
-                          child: Container(
-                            // groupMs5 (1:116)
-                            width: double.infinity,
-                            height: 43.06*fem,
-                            decoration: BoxDecoration (
-                              image: DecorationImage (
-                                fit: BoxFit.cover,
-                                image: AssetImage (
-                                  'assets/page-1/images/login-button-shape-Yx7.png',
-                                ),
-                              ),
-
-                            ),
-                            child: TextButton(
-                              // buttons5YB (1:118)
-                              onPressed: () {
-                                String macAddress =checkDeviceExist();
-                                if(macAddress != ""){
-                                  BuildContext dialogContext = context;
-                                  showDialog(
-                                    // The user CANNOT close this dialog  by pressing outsite it
-                                      barrierDismissible: false,
-                                      context: context,
-                                      builder: (BuildContext context) {
-                                        dialogContext = context;
-                                        return Dialog(
-                                          // The background color
-                                          backgroundColor: Colors.white,
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 20),
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: const [
-                                                // The loading indicator
-                                                CircularProgressIndicator(),
-                                                SizedBox(
-                                                  height: 15,
-                                                ),
-                                                // Some text
-                                                Text('Attending...')
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      });
-
-                                  checkOut(macAddress).then((value){
-                                    Navigator.pop(dialogContext);
-
-
-                                  });
-                                }
-                                else{
-                                  Fluttertoast.showToast(
-                                      msg: "Devices Not Found!!!",
-                                      toastLength: Toast.LENGTH_SHORT,
-                                      gravity: ToastGravity.BOTTOM,
-                                      timeInSecForIosWeb: 1,
-                                      backgroundColor: Colors.red,
-                                      textColor: Colors.white,
-                                      fontSize: 16.0
-                                  );
-                                }
-                              },
-                              style: TextButton.styleFrom (
-                                padding: EdgeInsets.zero,
-                              ),
-                              child: Container(
-                                width: double.infinity,
-                                height: double.infinity,
-                                decoration: BoxDecoration (
-                                  borderRadius: BorderRadius.circular(36.2043800354*fem),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Color(0x21000000),
-                                      offset: Offset(0*fem, 14.481751442*fem),
-                                      blurRadius: 50.6861305237*fem,
-                                    ),
-                                  ],
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Positioned(
-                                      // ellipse1yNf (I1:118;6:493)
-                                      left: 129.7591247559*fem,
-                                      top: 18.3795623779*fem,
-                                      child: Align(
-                                        child: SizedBox(
-                                          width: 7.24*fem,
-                                          height: 7.24*fem,
-                                          child: Container(
-                                            decoration: BoxDecoration (
-                                              borderRadius: BorderRadius.circular(3.6204378605*fem),
-                                              color: Color(0x00fbff48),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      // checkoutgH5 (1:119)
-                                      left: 79*fem,
-                                      top: 5*fem,
-                                      child: Align(
-                                        child: SizedBox(
-                                          width: 110*fem,
-                                          height: 30*fem,
-                                          child: Text(
-                                            'check out',
-                                            style: SafeGoogleFont (
+                                      Visibility(
+                                        visible: (attend.day == ""
+                                            && (DateTime.parse('2000-01-01 ${secondPeriodDate}').isAfter(
+                                                DateTime.parse('2000-01-01 ${workingHours[index].attend_time}').add(Duration(minutes: -30)) )))
+                                            ,
+                                        child: Text("لم يتم تسجيل الحضور"
+                                            ,style: SafeGoogleFont (
                                               'Roboto',
-                                              fontSize: 25*ffem,
-                                              fontWeight: FontWeight.w700,
-                                              height: 1.1725*ffem/fem,
-                                              color: Color(0xffffffff),
-                                            ),
-                                          ),
-                                        ),
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w300,
+                                              color: Colors.red,
+                                            )),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                                      Visibility(
+                                        visible: attend.day == "" &&
+                                            (DateTime.parse('2000-01-01 ${secondPeriodDate}').isBefore(DateTime.parse('2000-01-01 ${workingHours[index].attend_time}').add(Duration(minutes: -30)) )),
+                                        child: Text("لم يبدأ الدوام بعد"
+                                            ,style: SafeGoogleFont (
+                                              'Roboto',
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w300,
+                                              color: Colors.grey,
+                                            )),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+
+
+                            }),
+
                       ],
                     ),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              // group13891Axw (1:96)
-              left: 0.0000152588*fem,
-              top: 745*fem,
-              child: Container(
-                width: 375*fem,
-                height: 86.24*fem,
-                child: Stack(
-                  children: [
-                    Positioned(
-                      // group13888VVR (1:97)
-                      left: 0*fem,
-                      top: 0*fem,
-                      child: Align(
-                        child: SizedBox(
-                          width: 375*fem,
-                          height: 86.24*fem,
-                          child: Image.asset(
-                            'assets/page-1/images/group-13888.png',
-                            width: 375*fem,
-                            height: 86.24*fem,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      // homea15 (1:106)
-                      left: 165.2256317139*fem,
-                      top: 46.9999389648*fem,
-                      child: Align(
-                        child: SizedBox(
-                          width: 39*fem,
-                          height: 13*fem,
-                          child: Text(
-                            'Home',
-                            textAlign: TextAlign.right,
-                            style: SafeGoogleFont (
-                              'Poppins',
-                              fontSize: 12.6000013351*ffem,
-                              fontWeight: FontWeight.w400,
-                              height: 1*ffem/fem,
-                              letterSpacing: 0.2700000703*fem,
-                              color: Color(0xffe54476),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+
+
+
+
+            ],
+          ),
         ),
       ),
     );
   }
+
+
 }

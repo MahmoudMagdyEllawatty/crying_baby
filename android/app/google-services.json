@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1074189593711",
+    "project_id": "cryingbaby-a8dab",
+    "storage_bucket": "cryingbaby-a8dab.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1074189593711:android:665959b5c920e3155f319a",
+        "android_client_info": {
+          "package_name": "com.posit.attendance.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTa0x_jCYyz5CPT0v5hfDaYNQgjKlIsH4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

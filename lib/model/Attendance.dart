@@ -6,10 +6,13 @@ class Attendance {
   late String attend_at;
   late String leave_at;
   late String device;
+  late String actual_attend_at;
+  late String actual_leavel_at;
 
   Attendance.empty();
 
-  Attendance(this.day,this.id,this.attend_at,this.device,this.employer_id,this.leave_at);
+  Attendance(this.day,this.id,this.attend_at,this.device,this.employer_id,this.leave_at,
+      this.actual_attend_at,this.actual_leavel_at);
 
 
   Attendance.fromJson(Map<String,dynamic> json):
@@ -18,7 +21,10 @@ class Attendance {
         device=json['device'],
         attend_at=json['attend_at'],
         id=json['id'],
-        day=json['day'];
+        day=json['day'],
+        actual_attend_at=json['actual_attend_at'],
+        actual_leavel_at=json['actual_leavel_at']
+  ;
 
   Map<String,dynamic> toJson(){
     final Map<String, dynamic> data = new Map<String, dynamic>();
@@ -27,6 +33,8 @@ class Attendance {
     data['attend_at'] = this.attend_at;
     data['id'] = this.id;
     data['day'] = this.day;
+    data['actual_leavel_at'] = this.actual_leavel_at;
+    data['actual_attend_at'] = this.actual_attend_at;
 
     return data;
   }

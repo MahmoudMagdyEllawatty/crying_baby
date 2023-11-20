@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:attendance_app/page-1/home_page.dart';
+import 'package:CryingBaby/page-1/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:ui';
 
 import 'package:http/http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/EmployerLogin.dart';
 import '../model/SharedData.dart';
@@ -16,7 +17,7 @@ import '../widget/CustomColorSelectionHandle.dart';
 import 'home.dart';
 
 
-class Login extends StatefulWidget {
+class OldLogin extends StatefulWidget {
   @override
   State<StatefulWidget> createState() {
     return _LoginWidget();
@@ -24,7 +25,7 @@ class Login extends StatefulWidget {
 
 }
 
-class _LoginWidget extends State<Login>{
+class _LoginWidget extends State<OldLogin>{
 
   var _phoneContrller = TextEditingController();
   var _passwordContrller = TextEditingController();
@@ -68,6 +69,21 @@ class _LoginWidget extends State<Login>{
 
     }else{
       throw Exception('Cannot Save User');
+    }
+  }
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    requestPermission();
+  }
+
+  void requestPermission() async{
+    Map<Permission, PermissionStatus> statuses = await [Permission.bluetoothScan].request();
+
+    if (statuses[Permission.bluetoothScan] == PermissionStatus.granted && statuses[Permission.bluetoothScan] == PermissionStatus.granted) {
+      // permission granted
     }
   }
 

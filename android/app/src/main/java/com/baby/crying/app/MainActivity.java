@@ -1,4 +1,4 @@
-package com.posit.attendance.app;
+package com.baby.crying.app;
 
 import io.flutter.embedding.android.FlutterActivity;
 
