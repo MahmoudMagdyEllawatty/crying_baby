@@ -5,7 +5,6 @@ import 'dart:math';
 import 'package:CryingBaby/colors.dart';
 import 'package:CryingBaby/model/User.dart';
 import 'package:CryingBaby/page-1/admin/admin_home.dart';
-import 'package:CryingBaby/page-1/home_page.dart';
 import 'package:CryingBaby/page-1/register.dart';
 import 'package:CryingBaby/page-1/user/user_home.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -22,7 +21,6 @@ import '../model/EmployerLogin.dart';
 import '../model/SharedData.dart';
 import '../utils.dart';
 import '../widget/CustomColorSelectionHandle.dart';
-import 'home.dart';
 
 
 

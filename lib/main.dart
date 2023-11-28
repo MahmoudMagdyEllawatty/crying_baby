@@ -1,6 +1,5 @@
 import 'package:CryingBaby/colors.dart';
 import 'package:CryingBaby/page-1/login.dart';
-import 'package:CryingBaby/page-1/old-log-in.dart';
 import 'package:CryingBaby/page-1/splash.dart';
 import 'package:CryingBaby/utils.dart';
 import 'package:firebase_core/firebase_core.dart';

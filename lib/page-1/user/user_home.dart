@@ -2,22 +2,15 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:CryingBaby/colors.dart';
-import 'package:CryingBaby/page-1/add_request.dart';
 import 'package:CryingBaby/page-1/admin/advices.dart';
 import 'package:CryingBaby/page-1/admin/notifications.dart';
 import 'package:CryingBaby/page-1/admin/vaccines_list.dart';
-import 'package:CryingBaby/page-1/home_page.dart';
-import 'package:CryingBaby/page-1/not_yet.dart';
-import 'package:CryingBaby/page-1/profile.dart';
-import 'package:CryingBaby/page-1/requests.dart';
-import 'package:CryingBaby/page-1/statics.dart';
 import 'package:CryingBaby/page-1/user/diaries_list.dart';
 import 'package:CryingBaby/page-1/user/home.dart';
 import 'package:CryingBaby/page-1/user/questions_list.dart';
 import 'package:CryingBaby/page-1/user/user_advices.dart';
 import 'package:CryingBaby/page-1/user/user_notifications.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import 'package:CryingBaby/page-1/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_beacon/flutter_beacon.dart';
@@ -25,7 +18,6 @@ import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../app_scanning.dart';
 import '../login.dart';
 import 'childs_list.dart';
 
