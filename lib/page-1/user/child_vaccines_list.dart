@@ -132,7 +132,7 @@ class _ChildVaccinesList extends State<ChildVaccinesList> {
                             }else if(snap.hasData){
                               vaccines = snap.data!;
                               return ListView.builder(
-                                physics: AlwaysScrollableScrollPhysics(),
+                                physics: BouncingScrollPhysics(),
                                 scrollDirection: Axis.vertical,
                                 shrinkWrap: true,
                                 itemCount: vaccines.length,
@@ -157,6 +157,28 @@ class _ChildVaccinesList extends State<ChildVaccinesList> {
         ),
       )
     );
+  }
+
+  int getMonthsCount(String date){
+    return DateTime.parse(date).difference(DateTime.now()).inDays;
+  }
+
+  setVaccineTaken(ChildVaccines vaccine) async{
+    ChildVaccines childVaccine =ChildVaccines(
+        id: vaccine.id,
+        childKey: vaccine.childKey,
+        vaccine: vaccine.vaccine,
+        image: "",
+        date: vaccine.date,
+        state: 1);
+
+    final docVaccine = FirebaseFirestore.instance
+        .collection("child_vaccines")
+        .doc(vaccine.id);
+
+    final json = childVaccine.toJson();
+
+    await docVaccine.set(json);
   }
 
   Widget buildVaccine(ChildVaccines vaccine) => Container(
@@ -206,6 +228,27 @@ class _ChildVaccinesList extends State<ChildVaccinesList> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    Visibility(visible: vaccine.state == 1,
+                        child: Icon(Icons.album_rounded,
+                          color: Colors.green, size: 20,)),
+                    Visibility(visible: vaccine.state == 0 && getMonthsCount(vaccine.date) <= 60,
+                        child: Icon(Icons.album_rounded,
+                          color: Colors.orange, size: 20,)),
+                    Visibility(visible: vaccine.state == 0 && getMonthsCount(vaccine.date) > 60,
+                        child: Icon(Icons.album_rounded,
+                          color: Colors.red, size: 20,)),
+
+                    Visibility(visible: vaccine.state == 0,
+                        child: Checkbox(
+                          value: false,
+                          onChanged: (value){
+                            if(value == true){
+                              setVaccineTaken(vaccine);
+                            }
+                          },
+                        )
+                    ),
+
                     IconButton(onPressed: (){
                       SharedData.currentVaccine = vaccine;
                       Navigator.of(context).push(MaterialPageRoute(

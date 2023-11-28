@@ -295,13 +295,17 @@ class _HomePage extends State<Home> {
                                               ),
                                               Row(
                                                 children: [
-                                                  Text(vaccineName,
-                                                      style: SafeGoogleFont(
-                                                          'Roboto',
-                                                          fontSize: 16,
-                                                          fontWeight: FontWeight.w700,
-                                                          height: 1.1725,
-                                                          color: Colors.black)),
+                                                  Expanded(
+                                                    child: Text(vaccineName,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.fade,
+                                                        style: SafeGoogleFont(
+                                                            'Roboto',
+                                                            fontSize: 16,
+                                                            fontWeight: FontWeight.w700,
+                                                            height: 1.1725,
+                                                            color: Colors.black)),
+                                                  ),
                                                 ],
                                               ),
                                               Row(
