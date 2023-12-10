@@ -4,6 +4,7 @@ import 'package:CryingBaby/model/Child.dart';
 import 'package:CryingBaby/model/MonthStatics.dart';
 import 'package:CryingBaby/page-1/admin/add_vaccine.dart';
 import 'package:CryingBaby/page-1/admin/edit_vaccine.dart';
+import 'package:CryingBaby/page-1/user/child_drugs_list.dart';
 import 'package:CryingBaby/page-1/user/child_vaccines_list.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -239,6 +240,12 @@ class _TabChilds extends State<TabChilds> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      IconButton(onPressed: (){
+                        SharedData.currentChild = vaccine;
+                        Navigator.of(context).push(MaterialPageRoute(
+                            builder:(context) => ChildDrugsList()));
+                      }, icon: Icon(Icons.medication_liquid,color: Colors.green,)),
+
                       IconButton(onPressed: (){
                         SharedData.currentChild = vaccine;
                         Navigator.of(context).push(MaterialPageRoute(

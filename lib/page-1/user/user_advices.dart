@@ -76,6 +76,7 @@ class _TabUserAdvices extends State<TabUserAdvices> {
                     else if(snapshot.hasData){
                       final advices = snapshot.data!;
                       return ListView.builder(
+                        physics: BouncingScrollPhysics(),
                         scrollDirection: Axis.vertical,
                         shrinkWrap: true,
                         itemCount: advices.length,

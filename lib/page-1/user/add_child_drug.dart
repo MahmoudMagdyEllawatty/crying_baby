@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:CryingBaby/model/Advices.dart';
 import 'package:CryingBaby/model/Child.dart';
+import 'package:CryingBaby/model/ChildDrug.dart';
 import 'package:CryingBaby/model/ChildVaccines.dart';
 import 'package:CryingBaby/model/MonthStatics.dart';
 import 'package:CryingBaby/model/SharedData.dart';
@@ -32,38 +33,22 @@ import '../../utils.dart';
 import '../../widget/CustomColorSelectionHandle.dart';
 
 
-class AddChild extends StatefulWidget {
+class AddChildDrug extends StatefulWidget {
   @override
-  _AddChild createState() => _AddChild();
+  _AddChildDrug createState() => _AddChildDrug();
 }
 
-class _AddChild extends State<AddChild> {
+class _AddChildDrug extends State<AddChildDrug> {
 
   var _nameController = TextEditingController();
-  var _birthdateController = TextEditingController();
-  late SingleValueDropDownController _cnt;
+  var _dosageController = TextEditingController();
+  var _timesController = TextEditingController();
+  var _startDateController = TextEditingController();
+  var _endDateController = TextEditingController();
+  
   DateTime selectedDate = DateTime.now();
-  String imageUrl = "";
-  String nextVaccineDate = "";
-  List<String> types = [
-    "ولد",
-    "بنت"
-  ];
-
-  List<DropDownValueModel> DropDownItems(){
-    List<DropDownValueModel> items = [];
-    for(var i = 0; i < types.length;i++){
-
-      items.add(DropDownValueModel(name:types[i],
-          value:i));
-    }
-
-    return items;
-  }
-
-  List<Vaccine> vaccines = [];
-  List<ChildVaccines> childVaccines = [];
-
+  DateTime selectedEndDate = DateTime.now();
+  
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
         context: context,
@@ -73,247 +58,90 @@ class _AddChild extends State<AddChild> {
     if (picked != null && picked != selectedDate) {
       setState(() {
         selectedDate = picked;
-        _birthdateController.text = selectedDate.toLocal().toString().split(' ')[0];
-        DateTime dv = DateTime.parse(_birthdateController.text);
+        _startDateController.text = selectedDate.toLocal().toString().split(' ')[0];
+        DateTime dv = DateTime.parse(_startDateController.text);
         DateTime db= dv.add(Duration(days: 60));
-        nextVaccineDate = DateFormat("yyyy-MM-dd").format(db);
+      });
+    }
+  }
+
+  Future<void> _selectEndDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now(),
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2101));
+    if (picked != null && picked != selectedEndDate) {
+      setState(() {
+        selectedEndDate = picked;
+        _endDateController.text = selectedEndDate.toLocal().toString().split(' ')[0];
+        DateTime dv = DateTime.parse(_endDateController.text);
       });
     }
   }
 
   Future<String> createChild() async{
-    final docVaccine = FirebaseFirestore.instance
-        .collection("childs")
-        .doc();
-
-    final notification = Child(
-        name: _nameController.text,
-        birth_date: _birthdateController.text,
-        sexType : _cnt.dropDownValue!.name,
-        userKey: SharedData.currentUser.id,
-        id: docVaccine.id);
-
-    final json = notification.toJson();
-
-    await docVaccine.set(json);
-
-    await saveChildVaccines(notification.id);
-    return "";
-  }
-
-  Future saveChildVaccines (String childKey) async{
-    String birthDate = _birthdateController.text;
-    for(Vaccine vaccine in vaccines){
-      Duration duration = getDays(vaccine);
-      if(duration.inDays > -1){
-        DateTime dd = DateTime.parse(birthDate).add(duration);
 
 
-        if(dd.isAfter(DateTime.now())){
+    DateTime startDate = DateTime.parse(_startDateController.text);
+    DateTime endDate = DateTime.parse(_endDateController.text);
+    List<DateTime> days = [];
+    for (int i = 0; i <= endDate.difference(startDate).inDays; i++) {
+      days.add(startDate.add(Duration(days: i)));
+    }
 
+    for(DateTime date in days){
+
+      var times = int.parse( _timesController.text);
+      DateTime startDate = DateTime(date.year,date.month,date.day,12,0,0);
+      var duration = 24 / times;
+      for(int i =0; i < times ;i++){
+        DateTime startDateTime = startDate.add(Duration(hours: (duration*i).toInt()));
 
         final docVaccine = FirebaseFirestore.instance
-            .collection("child_vaccines")
+            .collection("child_drugs")
             .doc();
 
-        ChildVaccines childVaccine =ChildVaccines(
-            id: docVaccine.id,
-            childKey: childKey,
-            vaccine: vaccine.name,
-            image: "",
-            date: DateFormat('yyyy-MM-dd').format(dd),
-            state: 0);
-
-        childVaccines.add(childVaccine);
-
-        final notification = childVaccine;
+        final notification = ChildDrug(
+            end_date: new DateFormat("dd/MM/yyyy HH:mm:ss").format(startDateTime),
+            times: _timesController.text,
+            dosage: _dosageController.text,
+            date:  new DateFormat("dd/MM/yyyy HH:mm:ss").format(startDateTime),
+            childKey: SharedData.currentChild.id,
+            drug: _nameController.text,
+            state: 0,
+            id: docVaccine.id);
 
         final json = notification.toJson();
 
         await docVaccine.set(json);
-
-
-          scheduledNotification(year: dd.year, month: dd.month, day: dd.day, hour: 10, minutes: 0, seconds: 0,
-              id: getRandomInteger(), sound: 'alarm', title: vaccine.name, desc: _nameController.text+" لديه تطعيم "+vaccine.name+" اليوم ");
-
-        }
-
-
-
-        
       }
+
+
     }
+
+
+    return "";
   }
 
-  int getRandomInteger() {
-    final random = Random();
-    return random.nextInt(9999);
-  }
 
-  AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'high_importance_channel', // id
-    'High Importance Notifications', // title
-    description: 'This channel is used for important notifications.', // description
-    importance: Importance.max,
-  );
+
+
+
+
 
   @override
   void dispose() {
-    _cnt.dispose();
     super.dispose();
   }
 
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
-  scheduledNotification({
-    required int year,
-    required int month,
-    required int day,
-    required int hour,
-    required int minutes,
-    required int seconds,
-    required int id,
-    required String sound,
-    required String title,
-    required String desc
-  }) async {
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      id,
-      title,
-      desc,
-      _convertTime(year,month,day, hour, minutes,seconds),
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          'high_importance_channel',
-          'High Importance Attendance Notifications',
-          channelDescription: 'This channel is used for important attendance notifications.',
-          importance: Importance.max,
-          priority: Priority.high,
-          playSound: true,
-          sound: RawResourceAndroidNotificationSound(sound),
-          enableVibration: true,
-          enableLights: true,
-
-        ),
-      ),
-      androidAllowWhileIdle: true,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: 'It could be anything you pass',
-    );
-  }
-
-  tz.TZDateTime _convertTime(int year,int month,int day, int hour, int minutes,int seconds) {
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-
-    tz.TZDateTime scheduleDate = tz.TZDateTime(
-        tz.local,
-        year,
-        month,
-        day,
-        hour,
-        minutes,
-        seconds
-    );
-
-
-    // if (scheduleDate.isBefore(now)) {
-    //   scheduleDate = scheduleDate.add(const Duration(days: 1));
-    // }
-    // print('sc');
-
-    return scheduleDate;
-  }
-
-  Future<void> _configureLocalTimeZone() async {
-    tz.initializeTimeZones();
-    final String timeZone = await FlutterNativeTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(timeZone));
-  }
-
-
-  Duration getDays(Vaccine vaccine){
-    if(vaccine.day == "حديث الولادة"){
-      return Duration(days: 0);
-    }else if(vaccine.day == "شهر"){
-      return Duration(days: 30);
-    }else if(vaccine.day == "2 شهر"){
-      return Duration(days: 60);
-    }else if(vaccine.day == "3 أشهر"){
-      return Duration(days: 90);
-    }else if(vaccine.day == "4 أشهر"){
-      return Duration(days: 120);
-    }else if(vaccine.day == "6 أشهر"){
-      return Duration(days: 180);
-    }else if(vaccine.day == "8 أشهر"){
-      return Duration(days: 240);
-    }else if(vaccine.day == "10 أشهر"){
-      return Duration(days: 300);
-    }else if(vaccine.day == "11 أشهر"){
-      return Duration(days: 330);
-    }else if(vaccine.day == "عام"){
-      return Duration(days: 365);
-    }else if(vaccine.day == "18 أشهر"){
-      return Duration(days: 540);
-    }else if(vaccine.day == "عامان"){
-      return Duration(days: 730);
-    }
-
-    return Duration(days: -1);
-  }
-
-  void loadVaccines() async{
-    Stream<List<Vaccine>> vaccinesStram = await getVaccines();
-    vaccinesStram.listen((event) {
-      vaccines = event;
-      setState(() {
-
-      });
-    });
-
-  }
-
-  Stream<List<Vaccine>> getVaccines() => FirebaseFirestore.instance
-      .collection("vaccines")
-      .snapshots()
-      .map((event) => event.docs.map((e) => Vaccine.fromJson(e.data())).toList());
 
 
   @override
   void initState() {
-    _cnt = SingleValueDropDownController();
+
     super.initState();
-    setupInteractedMessage();
-    loadVaccines();
   }
-
-  Future<void> setupInteractedMessage() async {
-
-    _configureLocalTimeZone();
-
-
-    const androidSetting = AndroidInitializationSettings('ic_launcher');
-
-    final InitializationSettings initializationSettings = InitializationSettings(
-        android: androidSetting
-    );
-
-    await flutterLocalNotificationsPlugin.initialize(
-        initializationSettings,
-        onDidReceiveNotificationResponse:
-            (NotificationResponse notificationResponse) {
-          //print(notificationResponse);
-
-        }
-    );
-
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
-
-
-  }
-
 
 
   @override
@@ -323,7 +151,7 @@ class _AddChild extends State<AddChild> {
     return Scaffold(
 
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.child_data),
+        title: Text("بيانات الدواء"),
       ),
       body: SingleChildScrollView(
         child: Container(
@@ -356,7 +184,7 @@ class _AddChild extends State<AddChild> {
                             children: [
                               Container(
                                 padding: EdgeInsets.fromLTRB(0, 10, 0, 10),
-                                child: Text("إضافة طفل",style: SafeGoogleFont (
+                                child: Text("إضافة دواء",style: SafeGoogleFont (
                                   'Roboto',
                                   fontSize: 20,
                                   fontWeight: FontWeight.w700,
@@ -373,7 +201,7 @@ class _AddChild extends State<AddChild> {
 
                           Container(
                             margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                            child: Text("اسم الطفل",style: SafeGoogleFont (
+                            child: Text("اسم الدواء",style: SafeGoogleFont (
                                 'Roboto',
                                 fontSize: 19,
                                 fontWeight: FontWeight.w400,
@@ -399,7 +227,7 @@ class _AddChild extends State<AddChild> {
                                     border: InputBorder.none,
                                     fillColor: Colors.transparent,
                                     filled: true,
-                                    hintText: "اسم الطفل"
+                                    hintText: "اسم الدواء"
                                 ) ,
                                 style: SafeGoogleFont (
                                   'Roboto',
@@ -413,7 +241,7 @@ class _AddChild extends State<AddChild> {
 
                           Container(
                             margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                            child: Text("جنس الطفل",style: SafeGoogleFont (
+                            child: Text("الجرعة",style: SafeGoogleFont (
                                 'Roboto',
                                 fontSize: 19,
                                 fontWeight: FontWeight.w400,
@@ -425,14 +253,68 @@ class _AddChild extends State<AddChild> {
                             margin: EdgeInsets.fromLTRB(0, 5, 0, 10),
                             child: Material(
                               borderRadius: BorderRadius.all(Radius.circular(20)),
-                              child: DropDownTextField(
-                                controller: _cnt,
-                                clearOption: true,
-                                dropDownItemCount: types.length,
-                                dropDownList: DropDownItems(),
-                                onChanged: (inde){
+                              child: TextField(
+                                selectionControls: CustomColorSelectionHandle(Colors.transparent),
+                                keyboardType: TextInputType.text,
+                                controller: _dosageController,
+                                decoration: InputDecoration(
+                                    focusedBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(color: Colors.grey,width: 1.0)
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(color: Colors.grey,width: 1.0)
+                                    ),
+                                    border: InputBorder.none,
+                                    fillColor: Colors.transparent,
+                                    filled: true,
+                                    hintText: "الجرعة"
+                                ) ,
+                                style: SafeGoogleFont (
+                                  'Roboto',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w400,
+                                  color: primary,
+                                ),
+                              ),
+                            ),
+                          ),
 
-                                },
+                          Container(
+                            margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                            child: Text("عدد المرات في اليوم",style: SafeGoogleFont (
+                                'Roboto',
+                                fontSize: 19,
+                                fontWeight: FontWeight.w400,
+                                color: primary,
+                                decoration: TextDecoration.none
+                            )),
+                          ),
+                          Container(
+                            margin: EdgeInsets.fromLTRB(0, 5, 0, 10),
+                            child: Material(
+                              borderRadius: BorderRadius.all(Radius.circular(20)),
+                              child: TextField(
+                                selectionControls: CustomColorSelectionHandle(Colors.transparent),
+                                keyboardType: TextInputType.number,
+                                controller: _timesController,
+                                decoration: InputDecoration(
+                                    focusedBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(color: Colors.grey,width: 1.0)
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(color: Colors.grey,width: 1.0)
+                                    ),
+                                    border: InputBorder.none,
+                                    fillColor: Colors.transparent,
+                                    filled: true,
+                                    hintText: "عدد المرات"
+                                ) ,
+                                style: SafeGoogleFont (
+                                  'Roboto',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w400,
+                                  color: primary,
+                                ),
                               ),
                             ),
                           ),
@@ -440,7 +322,7 @@ class _AddChild extends State<AddChild> {
 
                           Container(
                             margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                            child: Text("تاريخ ميلاد الطفل",style: SafeGoogleFont (
+                            child: Text("تاريخ بداية أخذ الدواء",style: SafeGoogleFont (
                                 'Roboto',
                                 fontSize: 19,
                                 fontWeight: FontWeight.w400,
@@ -456,7 +338,7 @@ class _AddChild extends State<AddChild> {
                                 readOnly: true,
                                 selectionControls: CustomColorSelectionHandle(Colors.transparent),
                                 keyboardType: TextInputType.text,
-                                controller: _birthdateController,
+                                controller: _startDateController,
                                 decoration: InputDecoration(
                                     focusedBorder: OutlineInputBorder(
                                         borderSide: BorderSide(color: Colors.grey,width: 1.0)
@@ -467,7 +349,7 @@ class _AddChild extends State<AddChild> {
                                     border: InputBorder.none,
                                     fillColor: Colors.transparent,
                                     filled: true,
-                                    hintText: "تاريخ ميلاد الطفل"
+                                    hintText: "تاريخ بداية أخذ الدواء"
                                 ) ,
                                 style: SafeGoogleFont (
                                   'Roboto',
@@ -481,14 +363,50 @@ class _AddChild extends State<AddChild> {
                               ),
                             ),
                           ),
-                          Text("موعد التطعيم القادم : "+nextVaccineDate,style: SafeGoogleFont (
-                              'Roboto',
-                              fontSize: 16,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.black,
-                              decoration: TextDecoration.none
-                          )),
 
+                          Container(
+                            margin: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                            child: Text("تاريخ نهاية أخذ الدواء",style: SafeGoogleFont (
+                                'Roboto',
+                                fontSize: 19,
+                                fontWeight: FontWeight.w400,
+                                color: primary,
+                                decoration: TextDecoration.none
+                            )),
+                          ),
+                          Container(
+                            margin: EdgeInsets.fromLTRB(0, 5, 0, 10),
+                            child: Material(
+                              borderRadius: BorderRadius.all(Radius.circular(20)),
+                              child: TextField(
+                                readOnly: true,
+                                selectionControls: CustomColorSelectionHandle(Colors.transparent),
+                                keyboardType: TextInputType.text,
+                                controller: _endDateController,
+                                decoration: InputDecoration(
+                                    focusedBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(color: Colors.grey,width: 1.0)
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                        borderSide: BorderSide(color: Colors.grey,width: 1.0)
+                                    ),
+                                    border: InputBorder.none,
+                                    fillColor: Colors.transparent,
+                                    filled: true,
+                                    hintText: "تاريخ نهاية أخذ الدواء"
+                                ) ,
+                                style: SafeGoogleFont (
+                                  'Roboto',
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w400,
+                                  color: primary,
+                                ),
+                                onTap: (){
+                                  _selectEndDate(context);
+                                },
+                              ),
+                            ),
+                          ),
 
 
                           ElevatedButton(
@@ -525,7 +443,7 @@ class _AddChild extends State<AddChild> {
                                               height: 15,
                                             ),
 // Some text
-                                            Text('جاري حفظ الطفل ...')
+                                            Text('جاري حفظ الدواء ...')
                                           ],
                                         ),
                                       ),
